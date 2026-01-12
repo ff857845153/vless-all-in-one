@@ -7242,7 +7242,9 @@ _add_routing_rule() {
     _item "6" "TikTok"
     _item "7" "Telegram"
     _item "8" "Google"
-    _item "9" "自定义域名"
+    _item "9" "AI服务(国际)"
+    _item "c" "MyTVSuper"
+    _item "d" "自定义域名"
     _item "a" "所有流量"
     _item "b" "广告屏蔽 (geosite)"
     _item "0" "返回"
@@ -7260,7 +7262,9 @@ _add_routing_rule() {
         6) rule_type="tiktok" ;;
         7) rule_type="telegram" ;;
         8) rule_type="google" ;;
-        9)
+        9) rule_type="ai-intl" ;;
+        c|C) rule_type="mytvsuper" ;;
+        d|D)
             rule_type="custom"
             echo ""
             echo -e "  ${Y}输入要分流的匹配规则 (逗号分隔):${NC}"
