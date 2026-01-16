@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.2] - 2026-01-16
+
+### Added
+- 新增 SOCKS5 服务器自定义用户名和密码支持
+- 新增一键导入 Alice 家宽功能
+  - 支持 Alice 节点负载均衡组管理
+  - 支持 SOCKS5 负载均衡器使用 leastPing 策略
+  - 集成负载均衡配置到导入流程
+  - 分流规则选择出口时支持跳过延迟检测
+- 新增 sing-box 负载均衡支持
+
+### Fixed
+- 修复完全卸载时未清理 Caddy 二进制文件的问题
+- 修复 Alice 节点负载均衡器 SOCKS5 协议兼容性问题
+- 删除重复的负载均衡函数定义
+- 增强 URL 构建变量替换兼容性
+- 增强卸载流程,支持清理所有版本的 Caddy (包括 NaïveProxy 自定义编译版本)
+
+### Changed
+- 重构节点延迟检测机制并优化批量测速性能
+- 优化出口加载性能,减少 jq 调用次数
+- 移除危险操作确认机制并优化解析逻辑
+
 ## [3.2.1] - 2026-01-15
 
 ### Changed

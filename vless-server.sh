@@ -1,6 +1,6 @@
 #!/bin/bash
 #═══════════════════════════════════════════════════════════════════════════════
-#  多协议代理一键部署脚本 v3.2.1 [服务端]
+#  多协议代理一键部署脚本 v3.2.2 [服务端]
 #  
 #  架构升级:
 #    • Xray 核心: 处理 TCP/TLS 协议 (VLESS/VMess/Trojan/SOCKS/SS2022)
@@ -17,7 +17,7 @@
 #  项目地址: https://github.com/Chil30/vless-all-in-one
 #═══════════════════════════════════════════════════════════════════════════════
 
-readonly VERSION="3.2.1"
+readonly VERSION="3.2.2"
 readonly AUTHOR="Chil30"
 readonly REPO_URL="https://github.com/Chil30/vless-all-in-one"
 readonly SCRIPT_REPO="Chil30/vless-all-in-one"
@@ -14042,11 +14042,15 @@ do_uninstall() {
     _info "删除快捷命令..."
     rm -f /usr/local/bin/vless /usr/local/bin/vless.sh /usr/local/bin/vless-server.sh /usr/bin/vless 2>/dev/null
     
-    # 若安装过 NaïveProxy，清理带 forward_proxy 模块的 Caddy
-    if [[ "$has_naive" == "true" ]]; then
-        if check_cmd caddy && caddy list-modules 2>/dev/null | grep -q "http.handlers.forward_proxy"; then
-            rm -f /usr/local/bin/caddy 2>/dev/null
-        fi
+    # 清理 Caddy（如果存在）
+    # 支持 NaïveProxy 自定义编译版本和标准版本
+    if [[ -f "/usr/local/bin/caddy" ]]; then
+        _info "清理 Caddy 二进制文件..."
+        # 先停止可能存在的 Caddy 进程
+        pkill -9 caddy 2>/dev/null
+        # 删除二进制文件
+        rm -f /usr/local/bin/caddy 2>/dev/null
+        _ok "Caddy 已删除"
     fi
     
     _ok "卸载完成"
