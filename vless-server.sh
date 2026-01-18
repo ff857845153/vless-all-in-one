@@ -14913,7 +14913,7 @@ do_install_server() {
     
     # 根据协议安装对应软件
     case "$protocol" in
-        vless|vless-xhttp|vless-ws|vless-vision|ss2022|ss-legacy|trojan)
+        vless|vless-xhttp|vless-ws|vmess-ws|vless-vision|ss2022|ss-legacy|trojan|socks)
             install_xray || { _err "Xray 安装失败"; _pause; return 1; }
             ;;
         hy2|tuic)
