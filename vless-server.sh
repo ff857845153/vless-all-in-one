@@ -1909,15 +1909,71 @@ sync_time() {
 #═══════════════════════════════════════════════════════════════════════════════
 # 网络工具
 #═══════════════════════════════════════════════════════════════════════════════
+get_iface_ipv4() {
+    local result=""
+    if command -v ip &>/dev/null; then
+        result=$(ip -o -4 addr show scope global 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | head -n 1)
+    fi
+    if [[ -z "$result" ]] && command -v hostname &>/dev/null; then
+        result=$(hostname -I 2>/dev/null | awk '{for (i=1;i<=NF;i++) if ($i ~ /^([0-9]{1,3}\\.){3}[0-9]{1,3}$/) {print $i; exit}}')
+    fi
+    if [[ -z "$result" ]] && command -v ifconfig &>/dev/null; then
+        result=$(ifconfig 2>/dev/null | awk '/inet /{print $2}' | grep -E '^[0-9]+(\\.[0-9]+){3}$' | grep -v '^127\\.' | head -n 1)
+    fi
+    echo "$result"
+}
+
+get_iface_ipv6() {
+    local result=""
+    if command -v ip &>/dev/null; then
+        result=$(ip -o -6 addr show scope global 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | head -n 1)
+    fi
+    if [[ -z "$result" ]] && command -v hostname &>/dev/null; then
+        result=$(hostname -I 2>/dev/null | awk '{for (i=1;i<=NF;i++) if ($i ~ /:/ && $i !~ /^fe80:/ && $i != \"::1\") {print $i; exit}}')
+    fi
+    if [[ -z "$result" ]] && command -v ifconfig &>/dev/null; then
+        result=$(ifconfig 2>/dev/null | awk '/inet6 /{print $2}' | cut -d% -f1 | grep -E ':' | grep -v '^fe80:' | grep -v '^::1$' | head -n 1)
+    fi
+    echo "$result"
+}
+
 get_ipv4() {
     [[ -n "$_CACHED_IPV4" ]] && { echo "$_CACHED_IPV4"; return; }
-    local result=$(curl -4 -sf --connect-timeout 5 ip.sb 2>/dev/null || curl -4 -sf --connect-timeout 5 ifconfig.me 2>/dev/null)
+    local result=""
+    local ip_apis=("https://api.ipify.org" "https://ipinfo.io/ip" "https://ifconfig.me" "https://ip.sb" "https://api.ip.sb/ip")
+    local api
+    for api in "${ip_apis[@]}"; do
+        result=$(curl -4 -sf --connect-timeout 5 --max-time 8 "$api" 2>/dev/null | tr -d '[:space:]')
+        if [[ "$result" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
+            break
+        fi
+        result=""
+    done
+    if [[ -z "$result" ]]; then
+        # 兜底：使用网卡 IP
+        result=$(get_iface_ipv4)
+        [[ "$result" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] || result=""
+    fi
     [[ -n "$result" ]] && _CACHED_IPV4="$result"
     echo "$result"
 }
 get_ipv6() {
     [[ -n "$_CACHED_IPV6" ]] && { echo "$_CACHED_IPV6"; return; }
-    local result=$(curl -6 -sf --connect-timeout 5 ip.sb 2>/dev/null || curl -6 -sf --connect-timeout 5 ifconfig.me 2>/dev/null)
+    local result=""
+    local ip_apis=("https://api64.ipify.org" "https://api6.ipify.org" "https://ipinfo.io/ip" "https://ifconfig.me" "https://ip.sb")
+    local api
+    for api in "${ip_apis[@]}"; do
+        result=$(curl -6 -sf --connect-timeout 5 --max-time 8 "$api" 2>/dev/null | tr -d '[:space:]')
+        if [[ "$result" =~ ^([0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}$ ]]; then
+            break
+        fi
+        result=""
+    done
+    if [[ -z "$result" ]]; then
+        # 兜底：使用网卡 IP
+        result=$(get_iface_ipv6)
+        [[ "$result" =~ ^([0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}$ ]] || result=""
+    fi
     [[ -n "$result" ]] && _CACHED_IPV6="$result"
     echo "$result"
 }
