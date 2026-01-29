@@ -493,9 +493,12 @@ gen_xray_vless_clients() {
     fi
     
     local clients="[]"
+    declare -A seen_emails=()
     while IFS='|' read -r name uuid used quota enabled port routing; do
         [[ -z "$name" || -z "$uuid" || "$enabled" != "true" ]] && continue
         local email="${name}@${proto}"
+        [[ -n "${seen_emails[$email]+x}" ]] && continue
+        seen_emails["$email"]=1
         
         if [[ -n "$flow" ]]; then
             clients=$(echo "$clients" | jq --arg id "$uuid" --arg e "$email" --arg f "$flow" '. + [{id: $id, email: $e, flow: $f}]')
