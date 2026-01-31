@@ -297,12 +297,12 @@ db_get_all_protocols() {
 
 # 获取系统所有公网IPv4地址
 get_all_public_ipv4() {
-    ip -4 addr show scope global 2>/dev/null | grep -oP 'inet \K[\d.]+' | sort -u
+    ip -4 addr show scope global 2>/dev/null | awk '/inet / {print $2}' | cut -d'/' -f1 | sort -u
 }
 
 # 获取系统所有公网IPv6地址
 get_all_public_ipv6() {
-    ip -6 addr show scope global 2>/dev/null | grep -oP 'inet6 \K[0-9a-f:]+(?=/)' | grep -v '^fe80' | sort -u
+    ip -6 addr show scope global 2>/dev/null | awk '/inet6/ {print $2}' | cut -d'/' -f1 | grep -v '^fe80' | sort -u
 }
 
 # 获取系统所有公网IP (IPv4 + IPv6)
@@ -5919,7 +5919,6 @@ ask_cert_config() {
     echo "$domain"
 }
 
-# 修复 SELinux 上下文 (CentOS/RHEL)
 fix_selinux_context() {
     # 仅在 CentOS/RHEL 且 SELinux 启用时执行
     if [[ "$DISTRO" != "centos" ]]; then
@@ -6401,8 +6400,6 @@ _get_latest_version() {
     result=$(curl -sL --connect-timeout 5 --max-time 10 "https://api.github.com/repos/$repo/releases/latest" 2>/dev/null)
     curl_exit=$?
     if [[ $curl_exit -ne 0 ]]; then
-        # 调试：输出 curl 失败原因
-        echo "[DEBUG] curl 失败 (退出码: $curl_exit)" >&2
         return 1
     fi
     local version
@@ -6411,7 +6408,6 @@ _get_latest_version() {
     if [[ -z "$version" ]]; then
         # 调试：输出 jq 解析失败原因
         if [[ $jq_exit -ne 0 ]]; then
-            echo "[DEBUG] jq 解析失败 (退出码: $jq_exit)，响应前 200 字符:" >&2
             echo "$result" | head -c 200 >&2
             echo "" >&2
         fi
@@ -20356,7 +20352,7 @@ _is_cloudflared_installed() {
 # 获取 cloudflared 版本
 _get_cloudflared_version() {
     if _is_cloudflared_installed; then
-        "$CLOUDFLARED_BIN" --version 2>/dev/null | grep -oP '\d+\.\d+\.\d+' | head -1
+        "$CLOUDFLARED_BIN" --version 2>/dev/null | awk '{print $3}' | head -1
     else
         echo "未安装"
     fi
@@ -20594,12 +20590,15 @@ create_tunnel_interactive() {
     local existing_tunnel=$(_get_tunnel_name)
     local need_create=true
     
+    # 初始化变量，防止后续引用报错
+    local tunnel_name=""
+    local tunnel_id=""
+    
     # 同时检查 Cloudflare 远程是否有隧道（本地配置可能已丢失）
     if [[ -z "$existing_tunnel" ]]; then
         _info "检查 Cloudflare 账户中的隧道..."
-        local remote_tunnels=$("$CLOUDFLARED_BIN" $CLOUDFLARED_EDGE_OPTS tunnel list 2>/dev/null)
-        # 提取隧道名称（跳过表头和提示信息）
-        local tunnel_names=$(echo "$remote_tunnels" | grep -E "^[a-f0-9-]{36}" | awk '{print $2}' | head -5)
+        local remote_tunnels=$("$CLOUDFLARED_BIN" $CLOUDFLARED_EDGE_OPTS tunnel list 2>/dev/null) || true
+        local tunnel_names=$(echo "$remote_tunnels" | grep -E "^[a-f0-9-]{36}" | awk '{print $2}' | head -5 || true)
         if [[ -n "$tunnel_names" ]]; then
             echo ""
             echo -e "  ${Y}Cloudflare 账户中已有隧道:${NC}"
@@ -20623,6 +20622,32 @@ create_tunnel_interactive() {
         case "$tunnel_choice" in
             1)
                 need_create=false
+                tunnel_name="$existing_tunnel"
+                
+                # 尝试从 tunnel.info 读取 ID
+                if [[ -f "$CLOUDFLARED_DIR/tunnel.info" ]]; then
+                    tunnel_id=$(grep "^tunnel_id=" "$CLOUDFLARED_DIR/tunnel.info" | cut -d'=' -f2)
+                fi
+                
+                # 如果文件里没读到，尝试通过命令行获取
+                if [[ -z "$tunnel_id" ]]; then
+                    _info "正在获取隧道 ID..."
+                    tunnel_id=$("$CLOUDFLARED_BIN" $CLOUDFLARED_EDGE_OPTS tunnel list 2>/dev/null | grep "$tunnel_name" | awk '{print $1}' | head -1)
+                fi
+                
+                if [[ -z "$tunnel_id" ]]; then
+                    _err "无法获取隧道 ID，建议选择删除并重建"
+                    _pause
+                    return 1
+                fi
+                
+                # 确保 tunnel.info 文件存在且包含正确信息
+                if [[ ! -f "$CLOUDFLARED_DIR/tunnel.info" ]] || ! grep -q "^tunnel_id=" "$CLOUDFLARED_DIR/tunnel.info"; then
+                    cat > "$CLOUDFLARED_DIR/tunnel.info" << EOF
+tunnel_name=$tunnel_name
+tunnel_id=$tunnel_id
+EOF
+                fi
                 ;;
             2)
                 _info "删除现有隧道..."
@@ -20650,7 +20675,7 @@ create_tunnel_interactive() {
         local output=$("$CLOUDFLARED_BIN" $CLOUDFLARED_EDGE_OPTS tunnel create "$tunnel_name" 2>&1)
         
         if echo "$output" | grep -q "Created tunnel"; then
-            local tunnel_id=$(echo "$output" | grep -oP '[a-f0-9-]{36}' | head -1)
+            local tunnel_id=$(echo "$output" | awk '/Created tunnel/ {for(i=1;i<=NF;i++) if($i ~ /^[a-f0-9-]{36}$/) print $i}' | head -1)
             
             # 保存隧道信息
             cat > "$CLOUDFLARED_DIR/tunnel.info" << EOF
@@ -20731,7 +20756,7 @@ EOF
                         # 递归创建（简化处理）
                         local output2=$("$CLOUDFLARED_BIN" $CLOUDFLARED_EDGE_OPTS tunnel create "$tunnel_name" 2>&1)
                         if echo "$output2" | grep -q "Created tunnel"; then
-                            local tunnel_id=$(echo "$output2" | grep -oP '[a-f0-9-]{36}' | head -1)
+                            local tunnel_id=$(echo "$output2" | awk '/Created tunnel/ {for(i=1;i<=NF;i++) if($i ~ /^[a-f0-9-]{36}$/) print $i}' | head -1)
                             cat > "$CLOUDFLARED_DIR/tunnel.info" << EOF
 tunnel_name=$tunnel_name
 tunnel_id=$tunnel_id
@@ -20769,13 +20794,21 @@ EOF
     
     # 自动进入配置协议流程
     echo ""
-    read -rp "  是否现在配置协议? [Y/n]: " config_now
-    if [[ ! "$config_now" =~ ^[nN]$ ]]; then
-        add_protocol_to_tunnel
-        return $?
-    fi
+    printf "  是否现在配置协议? [Y/n]: "
+    config_now=""
+    read config_now || true
+    config_now="${config_now:-y}"
     
-    return 0
+    # Alpine 兼容性：使用 case 替代正则表达式
+    case "$config_now" in
+        [nN]|[nN][oO])
+            return 0
+            ;;
+        *)
+            add_protocol_to_tunnel
+            return $?
+            ;;
+    esac
 }
 
 # 快速隧道模式 (trycloudflare.com)
@@ -23460,7 +23493,7 @@ main_menu() {
     _update_all_versions_async "SagerNet/sing-box"
     _check_script_update_async
 
-    # 自动同步隧道配置（如果有隧道，检测并修复兼容性问题）
+    # 自动同步隧道配置
     _sync_tunnel_config 2>/dev/null
 
     while true; do
