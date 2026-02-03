@@ -9499,8 +9499,8 @@ create_service() {
             ;;
     esac
 
-    _write_openrc() { # name desc cmd args
-        local name="$1" desc="$2" cmd="$3" args="$4"
+    _write_openrc() { # name desc cmd args [env]
+        local name="$1" desc="$2" cmd="$3" args="$4" env="$5"
         cat >"/etc/init.d/${name}" <<EOF
 #!/sbin/openrc-run
 name="${desc}"
@@ -9508,6 +9508,7 @@ command="${cmd}"
 command_args="${args}"
 command_background="yes"
 pidfile="/run/${name}.pid"
+${env:+export ${env}}
 depend() { need net; }
 EOF
         chmod +x "/etc/init.d/${name}"
@@ -9538,13 +9539,16 @@ EOF
 
     if [[ "$DISTRO" == "alpine" ]]; then
         local cmd="${exec_cmd%% *}" args=""; [[ "$exec_cmd" == *" "* ]] && args="${exec_cmd#* }"
-        _write_openrc "$service_name" "Proxy Server ($protocol)" "$cmd" "$args"
+        local env=""
+        # ShadowTLS CPU 100% 修复: 高版本内核 io_uring 问题
+        [[ "$kind" == "shadowtls" ]] && env="MONOIO_FORCE_LEGACY_DRIVER=1"
+        _write_openrc "$service_name" "Proxy Server ($protocol)" "$cmd" "$args" "$env"
 
         if [[ "$kind" == "shadowtls" ]]; then
-            _write_openrc "${BACKEND_NAME[$protocol]}" "${BACKEND_DESC[$protocol]}" "${BACKEND_EXEC[$protocol]%% *}" "${BACKEND_EXEC[$protocol]#* }"
+            _write_openrc "${BACKEND_NAME[$protocol]}" "${BACKEND_DESC[$protocol]}" "${BACKEND_EXEC[$protocol]%% *}" "${BACKEND_EXEC[$protocol]#* }" ""
         fi
 
-        _write_openrc "vless-watchdog" "VLESS Watchdog" "/bin/bash" "$CFG/watchdog.sh"
+        _write_openrc "vless-watchdog" "VLESS Watchdog" "/bin/bash" "$CFG/watchdog.sh" ""
     else
         local pre="" env="" requires="" after=""
         [[ "$kind" == "hy2" ]] && pre="-/bin/bash $CFG/hy2-nat.sh"
