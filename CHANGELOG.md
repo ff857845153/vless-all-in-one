@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 检查是否还有其他 Nginx 配置文件
   - 如果没有其他配置，直接停止 Nginx 服务
   - 如果有其他配置，仅重载 Nginx
+- 修复添加用户时用户名大小写冲突导致 Xray 启动失败的问题
 
 ## [3.4.7] - 2026-02-05
 

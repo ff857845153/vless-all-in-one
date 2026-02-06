@@ -22790,9 +22790,27 @@ _add_user() {
         [[ -z "$name" ]] && { _err "用户名不能为空"; continue; }
         [[ "$name" =~ [^a-zA-Z0-9_-] ]] && { _err "用户名只能包含字母、数字、下划线和横线"; continue; }
         
-        # 检查是否已存在
+        # 检查是否已存在（精确匹配）
         local exists=$(db_get_user "$core" "$proto" "$name")
         [[ -n "$exists" ]] && { _err "用户 $name 已存在"; continue; }
+        
+        # 检查大小写冲突（Xray email 不区分大小写）
+        local name_lower=$(echo "$name" | tr '[:upper:]' '[:lower:]')
+        local conflict=false
+        local existing_users=$(db_list_users "$core" "$proto")
+        if [[ -n "$existing_users" ]]; then
+            while IFS= read -r existing_name; do
+                [[ -z "$existing_name" ]] && continue
+                local existing_lower=$(echo "$existing_name" | tr '[:upper:]' '[:lower:]')
+                if [[ "$name_lower" == "$existing_lower" && "$name" != "$existing_name" ]]; then
+                    _err "用户名 $name 与已存在的用户 $existing_name 冲突"
+                    conflict=true
+                    break
+                fi
+            done <<< "$existing_users"
+        fi
+        [[ "$conflict" == true ]] && continue
+        
         break
     done
     
